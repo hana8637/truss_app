@@ -3,25 +3,43 @@ import pandas as pd
 import math
 import numpy as np
 import io
+import os
+import urllib.request
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import koreanize_matplotlib  # 👈 한글 깨짐을 완벽하게 방지해주는 마법의 라이브러리
 from matplotlib.backends.backend_pdf import PdfPages
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 # ==============================================================================
-# 웹 페이지 기본 설정
+# 웹 페이지 기본 설정 및 한글 폰트 강제 다운로드 (무적 버전)
 # ==============================================================================
 st.set_page_config(page_title="하나천막기업 - 자재 산출 시스템", layout="wide", page_icon="🏢")
-# 폰트 설정 함수는 koreanize_matplotlib가 알아서 처리하므로 삭제되었습니다.
+
+@st.cache_resource
+def set_korean_font():
+    """구글에서 나눔고딕 폰트를 직접 다운로드하여 강제 적용 (버전 충돌 완벽 방지)"""
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+    font_path = "NanumGothic.ttf"
+    
+    # 폰트 파일이 없으면 다운로드
+    if not os.path.exists(font_path):
+        urllib.request.urlretrieve(font_url, font_path)
+        
+    # 다운받은 폰트를 맷플롯립에 추가하고 기본 폰트로 설정
+    fm.fontManager.addfont(font_path)
+    plt.rc('font', family='NanumGothic')
+    plt.rcParams['axes.unicode_minus'] = False
+
+# 폰트 설정 실행
+set_korean_font()
 
 # ==============================================================================
 # [1] 트러스 시스템 관련 엑셀 생성 함수
 # ==============================================================================
 def create_truss_excel_bytes(raw_data):
-    """트러스 엑셀 서식 지정 후 메모리(BytesIO)로 반환"""
     df = pd.DataFrame(raw_data)
     df_grouped = df.groupby(["구분", "품명", "재단기장(L)", "상단 가공각(°)", "하단 가공각(°)"]).size().reset_index(name='1대당 수량')
     
@@ -394,7 +412,6 @@ with tab1:
             def get_thick(func, x, od):
                 return od / get_cos(func, x)
 
-            # 상하현부 파이프의 안쪽 경계선을 정확히 반환하는 도우미 함수 (사선 절단 폴리곤용)
             def get_chord_y_top(x):
                 return get_y_top(x) - get_thick(get_y_top, x, m_od)
                 
@@ -446,7 +463,6 @@ with tab1:
                 y_bot_c = get_chord_y_bot(x)
                 y_top_c = get_chord_y_top(x)
                 
-                # 다대(수직 파이프)를 상현부/하현부 경사면에 완벽하게 밀착되도록 다각형으로 생성
                 if x_l < S/2 < x_r and not is_arch:
                     poly_top = [[x_r, yt_r], [S/2, get_chord_y_top(S/2)], [x_l, yt_l]]
                     poly_bot = [[x_l, yb_l], [S/2, get_chord_y_bot(S/2)], [x_r, yb_r]]
@@ -797,15 +813,13 @@ with tab1:
             
             plt.title(f"트러스 도면 ({t_name})\n{info_text}", fontsize=24, fontweight='bold', pad=20)
             
-            st.pyplot(fig) # 웹에 도면 표시
+            st.pyplot(fig) 
             
-            # 엑셀 다운로드 파일 생성
             excel_bytes = create_truss_excel_bytes(raw_data)
-            
-            # PDF 다운로드 파일 생성
             pdf_buffer = io.BytesIO()
             plt.savefig(pdf_buffer, format='pdf', bbox_inches='tight')
             pdf_buffer.seek(0)
+            plt.close(fig)
             
             st.success("✅ 트러스 렌더링 및 자재 산출이 완료되었습니다.")
             
@@ -1054,10 +1068,8 @@ with tab2:
                 if wall_mid_count > 0:
                     data.append(["[안내] 벽사다리 중간 가로절단", "-", "-", round(L_wall_mid, 1), "-", f"스나기({wall_snagi_mm}mm) 기준 적용"])
 
-            # 엑셀 바이트 생성
             excel_bytes = create_ladder_excel_bytes(data)
 
-            # PDF 도면 생성
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(max(26, L_cm/30), 26), gridspec_kw={'height_ratios': [1, 1.2, 1]})
             plt.subplots_adjust(hspace=0.25, top=0.95, bottom=0.05)
 
@@ -1225,11 +1237,12 @@ with tab2:
             ax3.set_ylim(-110, H_ridge_cm + 110)
             ax3.axis('off'); ax3.set_aspect('equal')
 
-            st.pyplot(fig) # 웹에 도면 표시
-
+            st.pyplot(fig) 
+            
             pdf_buffer_ladder = io.BytesIO()
             plt.savefig(pdf_buffer_ladder, format='pdf', bbox_inches='tight')
             pdf_buffer_ladder.seek(0)
+            plt.close(fig) 
             
             st.success("✅ 사다리 도면 및 엑셀 산출이 완료되었습니다.")
             
